@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"time"
 )
 
 func (c *Conditions) Check(instance interface{}, condition interface{}) bool {
@@ -30,7 +31,9 @@ func (c *Conditions) Check(instance interface{}, condition interface{}) bool {
 					return false
 				}
 			} else if operator, exists := stringToLogicOperator[key]; exists {
-				// Implement your checkCommonOperator logic here
+				if !c.checkLogicOperator(operator, value, instance) {
+					return false
+				}
 			} else {
 				leftSide := c.getValueByTemplate(key, instance)
 				rightSide := c.getValueByTemplate(value, instance)
@@ -184,13 +187,110 @@ func (c *Conditions) checkCommonOperator(operator CommonOperatorsEnum, value int
 	case BETWEEN:
 		rangeSlice, ok := c.getValueByTemplate(value, instance).([]interface{})
 		if !ok || len(rangeSlice) != 2 {
-			return false, nil // or log an error
+			return false, nil // Incorrect format
 		}
-		lower, upper := rangeSlice[0], rangeSlice[1]
-		// Implement comparison logic based on the types of lower, upper, and fact
 
+		lowerBound, upperBound := rangeSlice[0], rangeSlice[1]
+
+		compLower, err := attemptCompare(fact, lowerBound)
+		if err != nil || compLower == -1 {
+			return false, nil
+		}
+
+		compUpper, err := attemptCompare(fact, upperBound)
+		if err != nil || compUpper == 1 {
+			return false, nil
+		}
+
+		return true, nil
+	case SOME:
+		arrCond, ok := value.([]interface{})
+		if ok {
+			return false, fmt.Errorf("Bad fact type for $some operator")
+		}
+
+		for _, item := range arrCond {
+			if c.Check(item, value) {
+				return true, nil
+			}
+		}
+		return false, nil
+	case EVERY:
+		arrCond, ok := value.([]interface{})
+		if ok {
+			return false, fmt.Errorf("Bad fact type for $some operator")
+		}
+
+		for _, item := range arrCond {
+			if !c.Check(item, value) {
+				return false, nil
+			}
+		}
+		return true, nil
+	case NOONE:
+		arrCond, ok := value.([]interface{})
+		if ok {
+			return false, fmt.Errorf("Bad fact type for $some operator")
+		}
+
+		for _, item := range arrCond {
+			if c.Check(item, value) {
+				return false, nil
+			}
+		}
+		return true, nil
 	default:
 		return false, fmt.Errorf("unhandled operator %s", operator)
+	}
+}
+
+// checkLogicOperator evaluates the logical operation on a set of conditions.
+func (c *Conditions) checkLogicOperator(operator LogicOperatorsEnum, value interface{}, instance interface{}) bool {
+	// Convert value to a slice of conditions
+	var conditions []map[string]interface{}
+	switch v := value.(type) {
+	case []interface{}:
+		for _, item := range v {
+			if cond, ok := item.(map[string]interface{}); ok {
+				conditions = append(conditions, cond)
+			}
+		}
+	case map[string]interface{}:
+		conditions = append(conditions, v)
+	}
+
+	switch operator {
+	case OR:
+		for _, cond := range conditions {
+			if c.Check(instance, cond) {
+				return true
+			}
+		}
+		return false
+	case XOR:
+		trueCount := 0
+		for _, cond := range conditions {
+			if c.Check(instance, cond) {
+				trueCount++
+			}
+		}
+		return trueCount == 1
+	case AND:
+		for _, cond := range conditions {
+			if !c.Check(instance, cond) {
+				return false
+			}
+		}
+		return true
+	case NOT:
+		for _, cond := range conditions {
+			if c.Check(instance, cond) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false // Unrecognized operator
 	}
 }
 
@@ -221,6 +321,77 @@ func isInCollection(collection interface{}, element interface{}) bool {
 		}
 	}
 	return false
+}
+
+// attemptCompare tries to compare two values, accommodating for different types.
+// Returns 0 if equal, -1 if v1 < v2, 1 if v1 > v2, and an error if incomparable.
+func attemptCompare(v1, v2 interface{}) (int, error) {
+	switch v1Typed := v1.(type) {
+	case float64, float32, int, int64, int32, int16, int8, uint, uint64, uint32, uint16, uint8:
+		f1, _ := toFloat64(v1)
+		f2, _ := toFloat64(v2)
+
+		if f1 < f2 {
+			return -1, nil
+		} else if f1 > f2 {
+			return 1, nil
+		}
+		return 0, nil
+	case time.Time:
+		t2, ok := v2.(time.Time)
+		if !ok {
+			return 0, fmt.Errorf("cannot compare time.Time with non-time.Time")
+		}
+		if v1Typed.Before(t2) {
+			return -1, nil
+		} else if v1Typed.After(t2) {
+			return 1, nil
+		}
+		return 0, nil
+	default:
+		return 0, fmt.Errorf("unsupported type for comparison")
+	}
+}
+
+func toFloat64(v interface{}) (float64, bool) {
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return float64(rv.Int()), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return float64(rv.Uint()), true
+	case reflect.Float32, reflect.Float64:
+		return rv.Float(), true
+	default:
+		return 0, false
+	}
+}
+
+// Assuming `check` is defined on a `Conditions` struct as before.
+
+// checkSome evaluates if some elements in a slice meet the provided condition.
+func (c *Conditions) checkSome(instance []interface{}, condition interface{}) bool {
+	for _, item := range instance {
+		if c.Check(item, condition) {
+			return true
+		}
+	}
+	return false
+}
+
+// checkEvery evaluates if every element in a slice meets the provided condition.
+func (c *Conditions) checkEvery(instance []interface{}, condition interface{}) bool {
+	for _, item := range instance {
+		if !c.Check(item, condition) {
+			return false
+		}
+	}
+	return true
+}
+
+// checkNoOne evaluates if no elements in a slice meet the provided condition.
+func (c *Conditions) checkNoOne(instance []interface{}, condition interface{}) bool {
+	return !c.checkSome(instance, condition)
 }
 
 // getValueByTemplate fetches the value specified by a template string or returns the direct value.
