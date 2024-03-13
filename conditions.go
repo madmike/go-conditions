@@ -372,33 +372,6 @@ func toFloat64(v interface{}) (float64, bool) {
 	}
 }
 
-// Assuming `check` is defined on a `Conditions` struct as before.
-
-// checkSome evaluates if some elements in a slice meet the provided condition.
-func (c *Conditions) checkSome(instance []interface{}, condition interface{}) bool {
-	for _, item := range instance {
-		if c.Check(item, condition) {
-			return true
-		}
-	}
-	return false
-}
-
-// checkEvery evaluates if every element in a slice meets the provided condition.
-func (c *Conditions) checkEvery(instance []interface{}, condition interface{}) bool {
-	for _, item := range instance {
-		if !c.Check(item, condition) {
-			return false
-		}
-	}
-	return true
-}
-
-// checkNoOne evaluates if no elements in a slice meet the provided condition.
-func (c *Conditions) checkNoOne(instance []interface{}, condition interface{}) bool {
-	return !c.checkSome(instance, condition)
-}
-
 // getValueByTemplate fetches the value specified by a template string or returns the direct value.
 func (c *Conditions) getValueByTemplate(value interface{}, instance interface{}) interface{} {
 	valueStr, ok := value.(string)
