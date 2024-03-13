@@ -27,7 +27,12 @@ func (c *Conditions) Check(instance interface{}, condition interface{}) bool {
 					return false
 				}
 			} else if operator, exists := stringToCommonOperator[key]; exists {
-				if !c.checkCommonOperator(operator, value, instance) {
+				result, err := c.checkCommonOperator(operator, value, instance)
+				if err != nil {
+					// Handle the error here
+					return false
+				}
+				if !result {
 					return false
 				}
 			} else if operator, exists := stringToLogicOperator[key]; exists {
