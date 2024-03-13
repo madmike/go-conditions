@@ -164,6 +164,30 @@ func (c *Conditions) checkCommonOperator(operator CommonOperatorsEnum, value int
 			return false, nil // or log an error
 		}
 		return strings.HasSuffix(str, suffix), nil
+	case INCL:
+		element := c.getValueByTemplate(value, instance)
+		return isInCollection(fact, element), nil
+
+	case EXCL:
+		element := c.getValueByTemplate(value, instance)
+		return !isInCollection(fact, element), nil
+	case POWER:
+		num, ok := fact.(int) // Assuming fact is an int for simplicity
+		if !ok {
+			return false, nil // or log an error
+		}
+		power, ok := c.getValueByTemplate(value, instance).(int)
+		if !ok {
+			return false, nil // or log an error
+		}
+		return (num & power) != 0, nil
+	case BETWEEN:
+		rangeSlice, ok := c.getValueByTemplate(value, instance).([]interface{})
+		if !ok || len(rangeSlice) != 2 {
+			return false, nil // or log an error
+		}
+		lower, upper := rangeSlice[0], rangeSlice[1]
+		// Implement comparison logic based on the types of lower, upper, and fact
 
 	default:
 		return false, fmt.Errorf("unhandled operator %s", operator)
@@ -175,6 +199,25 @@ func contains[T comparable](s []T, e string) bool {
 	for _, a := range s {
 		if reflect.DeepEqual(a, e) {
 			return true
+		}
+	}
+	return false
+}
+
+func isInCollection(collection interface{}, element interface{}) bool {
+	val := reflect.ValueOf(collection)
+	switch val.Kind() {
+	case reflect.Slice, reflect.Array:
+		for i := 0; i < val.Len(); i++ {
+			if reflect.DeepEqual(val.Index(i).Interface(), element) {
+				return true
+			}
+		}
+	case reflect.Map:
+		for _, key := range val.MapKeys() {
+			if reflect.DeepEqual(val.MapIndex(key).Interface(), element) {
+				return true
+			}
 		}
 	}
 	return false
