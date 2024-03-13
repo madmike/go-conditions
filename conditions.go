@@ -210,8 +210,12 @@ func (c *Conditions) checkCommonOperator(operator CommonOperatorsEnum, value int
 		return true, nil
 	case SOME:
 		arrCond, ok := value.([]interface{})
-		if ok {
+		if !ok {
 			return false, fmt.Errorf("Bad fact type for $some operator")
+		}
+
+		if arrCond == nil {
+			return false, nil
 		}
 
 		for _, item := range arrCond {
@@ -226,6 +230,10 @@ func (c *Conditions) checkCommonOperator(operator CommonOperatorsEnum, value int
 			return false, fmt.Errorf("Bad fact type for $some operator")
 		}
 
+		if arrCond == nil {
+			return false, nil
+		}
+
 		for _, item := range arrCond {
 			if !c.Check(item, value) {
 				return false, nil
@@ -236,6 +244,10 @@ func (c *Conditions) checkCommonOperator(operator CommonOperatorsEnum, value int
 		arrCond, ok := value.([]interface{})
 		if ok {
 			return false, fmt.Errorf("Bad fact type for $some operator")
+		}
+
+		if arrCond == nil {
+			return false, nil
 		}
 
 		for _, item := range arrCond {
