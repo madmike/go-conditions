@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-func (c *Conditions) Check(instance interface{}, condition interface{}) bool {
+func (c *Conditions) Check(instance any, condition any) bool {
 	// Recursively check conditions if it's a slice, treating it as an AND condition
-	if conditions, ok := condition.([]interface{}); ok {
+	if conditions, ok := condition.([]any); ok {
 		for _, cond := range conditions {
 			if !c.Check(instance, cond) {
 				return false
@@ -20,7 +20,7 @@ func (c *Conditions) Check(instance interface{}, condition interface{}) bool {
 	}
 
 	// Handle condition maps
-	if condMap, ok := condition.(map[string]interface{}); ok {
+	if condMap, ok := condition.(map[string]any); ok {
 		for key, value := range condMap {
 			if operator, exists := stringToSimpleOperator[key]; exists {
 				if !c.checkSimpleOperator(operator, value, instance) {
@@ -51,10 +51,10 @@ func (c *Conditions) Check(instance interface{}, condition interface{}) bool {
 		}
 	}
 
-	return false // Placeholder return
+	return false
 }
 
-func (c *Conditions) checkSimpleOperator(operator SimpleOperatorsEnum, value interface{}, instance interface{}) bool {
+func (c *Conditions) checkSimpleOperator(operator SimpleOperatorsEnum, value any, instance any) bool {
 	fact := c.getValueByTemplate(value, instance)
 
 	switch operator {
@@ -62,8 +62,8 @@ func (c *Conditions) checkSimpleOperator(operator SimpleOperatorsEnum, value int
 		return fact == nil
 	case DEFINED:
 		return !reflect.ValueOf(fact).IsNil()
-	// case UNDEFINED:
-	// 	return reflect.ValueOf(fact).IsNil()
+	case UNDEFINED:
+		return reflect.ValueOf(fact).IsNil()
 	case EXIST:
 		return fact != nil && !reflect.ValueOf(fact).IsNil()
 	case EMPTY:
@@ -107,8 +107,8 @@ func (c *Conditions) checkSimpleOperator(operator SimpleOperatorsEnum, value int
 }
 
 // checkCommonOperator evaluates the instance against a common operator condition.
-func (c *Conditions) checkCommonOperator(operator CommonOperatorsEnum, value interface{}, instance interface{}) (bool, error) {
-	//var side interface{}
+func (c *Conditions) checkCommonOperator(operator CommonOperatorsEnum, value any, instance any) (bool, error) {
+	//var side any
 
 	fact := c.getValueByTemplate(value, instance)
 
@@ -139,14 +139,14 @@ func (c *Conditions) checkCommonOperator(operator CommonOperatorsEnum, value int
 		}
 		return re.MatchString(str), nil
 	case IN:
-		list, ok := c.getValueByTemplate(value, instance).([]interface{})
+		list, ok := c.getValueByTemplate(value, instance).([]any)
 		if !ok {
 			return false, nil // or log an error
 		}
 		return contains(list, fact.(string)), nil
 
 	case NI:
-		list, ok := c.getValueByTemplate(value, instance).([]interface{})
+		list, ok := c.getValueByTemplate(value, instance).([]any)
 		if !ok {
 			return false, nil // or log an error
 		}
@@ -190,7 +190,7 @@ func (c *Conditions) checkCommonOperator(operator CommonOperatorsEnum, value int
 		}
 		return (num & power) != 0, nil
 	case BETWEEN:
-		rangeSlice, ok := c.getValueByTemplate(value, instance).([]interface{})
+		rangeSlice, ok := c.getValueByTemplate(value, instance).([]any)
 		if !ok || len(rangeSlice) != 2 {
 			return false, nil // Incorrect format
 		}
@@ -209,13 +209,9 @@ func (c *Conditions) checkCommonOperator(operator CommonOperatorsEnum, value int
 
 		return true, nil
 	case SOME:
-		arrCond, ok := value.([]interface{})
+		arrCond, ok := value.([]any)
 		if !ok {
 			return false, fmt.Errorf("Bad fact type for $some operator")
-		}
-
-		if arrCond == nil {
-			return false, nil
 		}
 
 		for _, item := range arrCond {
@@ -225,13 +221,9 @@ func (c *Conditions) checkCommonOperator(operator CommonOperatorsEnum, value int
 		}
 		return false, nil
 	case EVERY:
-		arrCond, ok := value.([]interface{})
+		arrCond, ok := value.([]any)
 		if ok {
 			return false, fmt.Errorf("Bad fact type for $some operator")
-		}
-
-		if arrCond == nil {
-			return false, nil
 		}
 
 		for _, item := range arrCond {
@@ -241,13 +233,9 @@ func (c *Conditions) checkCommonOperator(operator CommonOperatorsEnum, value int
 		}
 		return true, nil
 	case NOONE:
-		arrCond, ok := value.([]interface{})
+		arrCond, ok := value.([]any)
 		if ok {
 			return false, fmt.Errorf("Bad fact type for $some operator")
-		}
-
-		if arrCond == nil {
-			return false, nil
 		}
 
 		for _, item := range arrCond {
@@ -262,17 +250,17 @@ func (c *Conditions) checkCommonOperator(operator CommonOperatorsEnum, value int
 }
 
 // checkLogicOperator evaluates the logical operation on a set of conditions.
-func (c *Conditions) checkLogicOperator(operator LogicOperatorsEnum, value interface{}, instance interface{}) bool {
+func (c *Conditions) checkLogicOperator(operator LogicOperatorsEnum, value any, instance any) bool {
 	// Convert value to a slice of conditions
-	var conditions []map[string]interface{}
+	var conditions []map[string]any
 	switch v := value.(type) {
-	case []interface{}:
+	case []any:
 		for _, item := range v {
-			if cond, ok := item.(map[string]interface{}); ok {
+			if cond, ok := item.(map[string]any); ok {
 				conditions = append(conditions, cond)
 			}
 		}
-	case map[string]interface{}:
+	case map[string]any:
 		conditions = append(conditions, v)
 	}
 
@@ -321,7 +309,7 @@ func contains[T comparable](s []T, e string) bool {
 	return false
 }
 
-func isInCollection(collection interface{}, element interface{}) bool {
+func isInCollection(collection any, element any) bool {
 	val := reflect.ValueOf(collection)
 	switch val.Kind() {
 	case reflect.Slice, reflect.Array:
@@ -342,7 +330,7 @@ func isInCollection(collection interface{}, element interface{}) bool {
 
 // attemptCompare tries to compare two values, accommodating for different types.
 // Returns 0 if equal, -1 if v1 < v2, 1 if v1 > v2, and an error if incomparable.
-func attemptCompare(v1, v2 interface{}) (int, error) {
+func attemptCompare(v1, v2 any) (int, error) {
 	switch v1Typed := v1.(type) {
 	case float64, float32, int, int64, int32, int16, int8, uint, uint64, uint32, uint16, uint8:
 		f1, _ := toFloat64(v1)
@@ -370,7 +358,7 @@ func attemptCompare(v1, v2 interface{}) (int, error) {
 	}
 }
 
-func toFloat64(v interface{}) (float64, bool) {
+func toFloat64(v any) (float64, bool) {
 	rv := reflect.ValueOf(v)
 	switch rv.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -385,7 +373,7 @@ func toFloat64(v interface{}) (float64, bool) {
 }
 
 // getValueByTemplate fetches the value specified by a template string or returns the direct value.
-func (c *Conditions) getValueByTemplate(value interface{}, instance interface{}) interface{} {
+func (c *Conditions) getValueByTemplate(value any, instance any) any {
 	valueStr, ok := value.(string)
 	if !ok {
 		return value
@@ -400,7 +388,7 @@ func (c *Conditions) getValueByTemplate(value interface{}, instance interface{})
 }
 
 // getTemplateString processes a template string with placeholders, replacing them with actual values from the instance.
-func (c *Conditions) getTemplateString(value string, instance interface{}) string {
+func (c *Conditions) getTemplateString(value string, instance any) string {
 	re := regexp.MustCompile(`\{\{[-a-zA-Z0-9_]+\}\}`)
 	matches := re.FindAllString(value, -1)
 	for _, match := range matches {
@@ -422,9 +410,9 @@ func (c *Conditions) getTemplateString(value string, instance interface{}) strin
 }
 
 // getValueByChain retrieves a value from an instance based on a "dot" path (e.g., "a.b.c").
-func (c *Conditions) getValueByChain(param string, instance interface{}) interface{} {
+func (c *Conditions) getValueByChain(param string, instance any) any {
 	chain := strings.Split(param, ".")
-	var result interface{}
+	var result any
 
 	for _, step := range chain {
 		instanceValue := reflect.ValueOf(instance)
@@ -445,7 +433,7 @@ func (c *Conditions) getValueByChain(param string, instance interface{}) interfa
 	return result
 }
 
-func (c *Conditions) compareNumbersOrDates(fact interface{}, side interface{}, operator CommonOperatorsEnum) (bool, error) {
+func (c *Conditions) compareNumbersOrDates(fact any, side any, operator CommonOperatorsEnum) (bool, error) {
 	// Type assert and compare
 	// This is a simplified example; you'll need to handle different types appropriately
 	factValue, ok := fact.(float64) // Assuming you've normalized numbers to float64
