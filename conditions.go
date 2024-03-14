@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
-	"time"
 )
 
 func (c *Conditions) Check(instance any, condition any) bool {
@@ -26,23 +25,16 @@ func (c *Conditions) Check(instance any, condition any) bool {
 			if operator, exists := stringToSimpleOperator[key]; exists {
 				return c.checkSimpleOperator(operator, value, instance)
 			} else if operator, exists := stringToLogicOperator[key]; exists {
-				if !c.checkLogicOperator(operator, value, instance) {
-					return false
-				}
+				return c.checkLogicOperator(operator, value, instance)
 			} else if valueKind == reflect.Map || valueKind == reflect.Struct {
 				result, err := c.checkCommonOperator(key, value, instance)
-				if err != nil || !result {
-					return false
-				}
-				return true
+				return err == nil && result
 			} else {
 				leftSide := c.getValueByTemplate(key, instance)
 				rightSide := c.getValueByTemplate(value, instance)
 
 				// Check for equality
-				if !reflect.DeepEqual(leftSide, rightSide) {
-					return false
-				}
+				return reflect.DeepEqual(leftSide, rightSide)
 			}
 		}
 	}
@@ -113,9 +105,6 @@ func (c *Conditions) checkCommonOperator(key string, value any, instance any) (b
 	}
 
 	for operator, conditionValue := range conditionMap {
-		// fmt.Printf("fact: %v\n", fact)
-		// fmt.Printf("operator: %v\n", operator)
-		// fmt.Printf("conditionValue: %v\n", conditionValue)
 		switch CommonOperatorsEnum(operator) {
 		case EQ:
 			if !reflect.DeepEqual(fact, conditionValue) {
@@ -271,7 +260,7 @@ func (c *Conditions) checkCommonOperator(key string, value any, instance any) (b
 			for i := 0; i < conditionVal.Len(); i++ {
 				conditionItem := conditionVal.Index(i).Interface()
 
-				// Check if conditionItem is in factVal slice.
+				// Check if conditionItem is or is not (for $noone) in factVal slice.
 				for j := 0; j < factVal.Len(); j++ {
 					factItem := factVal.Index(j).Interface()
 					eq := reflect.DeepEqual(factItem, conditionItem)
@@ -284,7 +273,7 @@ func (c *Conditions) checkCommonOperator(key string, value any, instance any) (b
 				}
 			}
 
-			// All elements in conditionValue exist in the factVal slice.
+			// All elements in conditionValue exist or don't exist (for $noone) in the factVal slice.
 			return true, nil
 		default:
 			return false, fmt.Errorf("unhandled operator %s", operator)
@@ -298,15 +287,33 @@ func (c *Conditions) checkCommonOperator(key string, value any, instance any) (b
 func (c *Conditions) checkLogicOperator(operator LogicOperatorsEnum, value any, instance any) bool {
 	// Convert value to a slice of conditions
 	var conditions []map[string]any
-	switch v := value.(type) {
-	case []any:
-		for _, item := range v {
+
+	// Use reflection to handle both []any and []map[string]any cases gracefully
+	val := reflect.ValueOf(value)
+	if val.Kind() == reflect.Slice {
+		for i := 0; i < val.Len(); i++ {
+			item := val.Index(i).Interface()
+
+			// Attempt to assert each item's type to a map[string]any
 			if cond, ok := item.(map[string]any); ok {
 				conditions = append(conditions, cond)
+			} else {
+				// Handle error or unexpected type
+				fmt.Printf("Unexpected type in conditions slice: got %T\n", item)
+				return false
 			}
 		}
-	case map[string]any:
-		conditions = append(conditions, v)
+	} else if v, ok := value.(map[string]any); ok {
+		// If a single map is provided, convert it into an array of maps,
+		// each containing one key-value pair from the original map.
+		for key, val := range v {
+			singleCondition := map[string]any{key: val}
+			conditions = append(conditions, singleCondition)
+		}
+	} else {
+		// Handle other unexpected types
+		fmt.Printf("Unexpected type for value: got %T\n", value)
+		return false
 	}
 
 	switch operator {
@@ -342,16 +349,6 @@ func (c *Conditions) checkLogicOperator(operator LogicOperatorsEnum, value any, 
 	default:
 		return false // Unrecognized operator
 	}
-}
-
-// Helper function to check if a slice contains a specific key
-func contains[T comparable](s []T, e string) bool {
-	for _, a := range s {
-		if reflect.DeepEqual(a, e) {
-			return true
-		}
-	}
-	return false
 }
 
 // getValueByTemplate fetches the value specified by a template string or returns the direct value.
@@ -425,66 +422,4 @@ func (c *Conditions) getValueByChain(param string, instance any) any {
 		result = instance
 	}
 	return result
-}
-
-func isInCollection(collection any, element any) bool {
-	val := reflect.ValueOf(collection)
-	switch val.Kind() {
-	case reflect.Slice, reflect.Array:
-		for i := 0; i < val.Len(); i++ {
-			if reflect.DeepEqual(val.Index(i).Interface(), element) {
-				return true
-			}
-		}
-	case reflect.Map:
-		value := val.MapIndex(reflect.ValueOf(element))
-		if value.IsValid() {
-			return true
-		}
-	}
-	return false
-}
-
-// attemptCompare tries to compare two values, accommodating for different types.
-// Returns 0 if equal, -1 if v1 < v2, 1 if v1 > v2, and an error if incomparable.
-func compareNumbersOrDates(v1, v2 any) (int, error) {
-	switch v1Typed := v1.(type) {
-	case float64, float32, int, int64, int32, int16, int8, uint, uint64, uint32, uint16, uint8:
-		f1, _ := toFloat64(v1)
-		f2, _ := toFloat64(v2)
-
-		if f1 < f2 {
-			return -1, nil
-		} else if f1 > f2 {
-			return 1, nil
-		}
-		return 0, nil
-	case time.Time:
-		t2, ok := v2.(time.Time)
-		if !ok {
-			return 0, fmt.Errorf("cannot compare time.Time with non-time.Time")
-		}
-		if v1Typed.Before(t2) {
-			return -1, nil
-		} else if v1Typed.After(t2) {
-			return 1, nil
-		}
-		return 0, nil
-	default:
-		return 0, fmt.Errorf("unsupported type for comparison")
-	}
-}
-
-func toFloat64(value any) (float64, bool) {
-	rv := reflect.ValueOf(value)
-	switch rv.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return float64(rv.Int()), true
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return float64(rv.Uint()), true
-	case reflect.Float32, reflect.Float64:
-		return rv.Float(), true
-	default:
-		return 0, false // Not a numeric type
-	}
 }
