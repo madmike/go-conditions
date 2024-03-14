@@ -219,25 +219,32 @@ func (c *Conditions) checkCommonOperator(key string, value any, instance any) (b
 			}
 
 			conditionVal := reflect.ValueOf(conditionValue)
-			if conditionVal.Kind() != reflect.Slice {
-				return false, fmt.Errorf("expected a slice for $some operator, got %T", conditionValue)
-			}
 
-			// Iterate over each item in the conditionValue slice.
-			for i := 0; i < conditionVal.Len(); i++ {
-				conditionItem := conditionVal.Index(i).Interface()
+			// Handle conditionValue as a slice
+			if conditionVal.Kind() == reflect.Slice {
+				// Iterate over each item in the conditionValue slice.
+				for i := 0; i < conditionVal.Len(); i++ {
+					conditionItem := conditionVal.Index(i).Interface()
 
-				// Check if conditionItem is in factVal slice.
-				for j := 0; j < factVal.Len(); j++ {
-					factItem := factVal.Index(j).Interface()
-
-					if reflect.DeepEqual(factItem, conditionItem) {
-						return true, nil
+					// Check if conditionItem is in factVal slice.
+					for j := 0; j < factVal.Len(); j++ {
+						factItem := factVal.Index(j).Interface()
+						if reflect.DeepEqual(factItem, conditionItem) {
+							return true, nil // Found matching element.
+						}
 					}
 				}
+				return false, nil // No matching elements found.
+			} else { // Handle single condition value
+				singleCondition := conditionVal.Interface()
+				for j := 0; j < factVal.Len(); j++ {
+					factItem := factVal.Index(j).Interface()
+					if reflect.DeepEqual(factItem, singleCondition) {
+						return true, nil // Found matching element.
+					}
+				}
+				return false, nil // No matching element found.
 			}
-
-			return false, nil // No matching elements found.
 		case EVERY, NOONE:
 			factVal := reflect.ValueOf(fact)
 			if factVal.Kind() != reflect.Slice {
@@ -245,29 +252,56 @@ func (c *Conditions) checkCommonOperator(key string, value any, instance any) (b
 			}
 
 			conditionVal := reflect.ValueOf(conditionValue)
-			if conditionVal.Kind() != reflect.Slice {
-				return false, fmt.Errorf("expected a slice for $every operator, got %T", conditionValue)
-			}
+			fmt.Printf("conditionVal: %v\n", conditionVal)
 
-			// Iterate over each item in the conditionValue slice.
-			for i := 0; i < conditionVal.Len(); i++ {
-				conditionItem := conditionVal.Index(i).Interface()
+			// Handle conditionValue as a slice
+			if conditionVal.Kind() == reflect.Slice {
+				var result bool
+				// Iterate over each item in the conditionValue slice.
+				for i := 0; i < conditionVal.Len(); i++ {
+					result = false
+					conditionItem := conditionVal.Index(i).Interface()
 
-				// Check if conditionItem is or is not (for $noone) in factVal slice.
+					// Check if conditionItem is in factVal slice.
+					for j := 0; j < factVal.Len(); j++ {
+						factItem := factVal.Index(j).Interface()
+						eq := reflect.DeepEqual(factItem, conditionItem)
+
+						if CommonOperatorsEnum(operator) == EVERY && eq || CommonOperatorsEnum(operator) == NOONE && !eq {
+							result = true
+						}
+						if CommonOperatorsEnum(operator) == NOONE && eq {
+							return false, nil
+						}
+					}
+
+					if !result {
+						return false, nil
+					}
+				}
+
+				return result, nil // No matching elements found.
+			} else { // Handle single condition value
+				conditionItem := conditionVal.Interface()
+
 				for j := 0; j < factVal.Len(); j++ {
 					factItem := factVal.Index(j).Interface()
 					eq := reflect.DeepEqual(factItem, conditionItem)
 
-					if CommonOperatorsEnum(operator) == EVERY && !eq {
-						return false, nil
-					} else if CommonOperatorsEnum(operator) == NOONE && eq {
+					if CommonOperatorsEnum(operator) == NOONE && eq {
 						return false, nil
 					}
+					if CommonOperatorsEnum(operator) == EVERY && eq {
+						return true, nil
+					}
+				}
+
+				if CommonOperatorsEnum(operator) == NOONE {
+					return true, nil
+				} else {
+					return false, nil // No matching element found.
 				}
 			}
-
-			// All elements in conditionValue exist or don't exist (for $noone) in the factVal slice.
-			return true, nil
 		default:
 			return false, fmt.Errorf("unhandled operator %s", operator)
 		}
@@ -310,9 +344,12 @@ func (c *Conditions) checkLogicOperator(operator LogicOperatorsEnum, value any, 
 	switch operator {
 	case OR:
 		for _, cond := range conditions {
+			fmt.Println("OR condition: ", cond)
 			if c.Check(instance, cond) {
+				fmt.Println("result: ", true)
 				return true
 			}
+			fmt.Println("result: ", false)
 		}
 		return false
 	case XOR:

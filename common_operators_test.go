@@ -182,10 +182,10 @@ func TestCheckCommonOperators(t *testing.T) {
 		{
 			name: "Test $every operator false",
 			condition: map[string]any{
-				"{{values}}": map[string]any{"$every": []int{1, 5, 9}},
+				"{{values}}": map[string]any{"$every": []int{1, 5, 8}},
 			},
 			instance: map[string]any{
-				"values": []int{1, 5},
+				"values": []int{1, 5, 7},
 			},
 			want: false,
 		},
