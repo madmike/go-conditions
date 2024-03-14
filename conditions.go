@@ -48,9 +48,9 @@ func (c *Conditions) checkSimpleOperator(operator SimpleOperatorsEnum, value any
 	case NULL:
 		return fact == nil
 	case DEFINED:
-		return fact != nil //!reflect.ValueOf(fact).IsNil()
+		return fact != nil
 	case UNDEFINED:
-		return fact == nil //reflect.ValueOf(fact).IsNil()
+		return fact == nil
 	case EXIST:
 		return fact != nil
 	case EMPTY:
@@ -59,9 +59,8 @@ func (c *Conditions) checkSimpleOperator(operator SimpleOperatorsEnum, value any
 		case reflect.Array, reflect.Slice, reflect.String, reflect.Map:
 			return v.Len() == 0
 		default:
-			// Go doesn't have a direct equivalent to JavaScript's broad object type;
-			// structs could be checked for being "empty" in a different way, if needed.
-			return false // Or throw an error, as per your application's needs
+			// TODO check for empty struct
+			return false
 		}
 	case BLANK:
 		if fact == nil || reflect.ValueOf(fact).IsNil() {
@@ -82,7 +81,7 @@ func (c *Conditions) checkSimpleOperator(operator SimpleOperatorsEnum, value any
 		case reflect.Map:
 			return v.Len() == 0
 		default:
-			return false // Or throw an error
+			return false // throw an error
 		}
 	case TRULY:
 		return fact == true
@@ -93,9 +92,7 @@ func (c *Conditions) checkSimpleOperator(operator SimpleOperatorsEnum, value any
 	}
 }
 
-// checkCommonOperator evaluates the instance against a common operator condition.
 func (c *Conditions) checkCommonOperator(key string, value any, instance any) (bool, error) {
-	// Extract the fact based on the key from the instance.
 	fact := c.getValueByTemplate(key, instance)
 
 	// Ensure that value is a map containing our conditions.
@@ -283,7 +280,6 @@ func (c *Conditions) checkCommonOperator(key string, value any, instance any) (b
 	return true, nil
 }
 
-// checkLogicOperator evaluates the logical operation on a set of conditions.
 func (c *Conditions) checkLogicOperator(operator LogicOperatorsEnum, value any, instance any) bool {
 	// Convert value to a slice of conditions
 	var conditions []map[string]any
@@ -311,7 +307,6 @@ func (c *Conditions) checkLogicOperator(operator LogicOperatorsEnum, value any, 
 			conditions = append(conditions, singleCondition)
 		}
 	} else {
-		// Handle other unexpected types
 		fmt.Printf("Unexpected type for value: got %T\n", value)
 		return false
 	}
@@ -347,7 +342,7 @@ func (c *Conditions) checkLogicOperator(operator LogicOperatorsEnum, value any, 
 		}
 		return true
 	default:
-		return false // Unrecognized operator
+		return false // throw Unrecognized operator
 	}
 }
 
