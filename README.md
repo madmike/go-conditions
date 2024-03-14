@@ -91,6 +91,50 @@ fmt.Println(result) // Output: true
 - **AND**: `$and`
 - **NOT**: `$not`
 
+## Testing and Coverage
+
+Testing is an essential part of software development that ensures your application behaves as expected. The `go-conditions` library supports extensive testing capabilities to help maintain high-quality code.
+
+### Running Tests
+
+To run tests, execute the following command in the terminal at the root of your project:
+
+```bash
+go test .
+```
+
+This command will run all tests in the current project and its subdirectories. To see detailed output for each test, including successful tests, use the -v (verbose) flag:
+
+```bash
+go test -v .
+```
+
+### Viewing Test Coverage
+
+Go provides built-in support for analyzing test coverage. To generate a test coverage report, run:
+
+```bash
+go test -coverprofile=coverage.out .
+```
+
+Then, to view the coverage report in your terminal, use:
+
+```bash
+go tool cover -func=coverage.out
+```
+
+For a more visual representation, generate an HTML coverage report:
+
+```bash
+go tool cover -html=coverage.out
+```
+
+This command opens the generated report in your default web browser, showing which lines of code were executed during tests.
+
+### Continuous Improvement
+
+As you add new features or discover bugs, writing tests should be a parallel effort to coding. Aim to improve test coverage iteratively, especially in areas identified as under-tested in your coverage reports.
+
 ## Contributing
 
 We welcome contributions to the smart-conditions library! Please feel free to submit issues, pull requests, or enhancements to improve the library's functionality and usability.

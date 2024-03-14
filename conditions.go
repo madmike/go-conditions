@@ -30,11 +30,7 @@ func (c *Conditions) Check(instance any, condition any) bool {
 				result, err := c.checkCommonOperator(key, value, instance)
 				return err == nil && result
 			} else {
-				leftSide := c.getValueByTemplate(key, instance)
-				rightSide := c.getValueByTemplate(value, instance)
-
-				// Check for equality
-				return reflect.DeepEqual(leftSide, rightSide)
+				return reflect.DeepEqual(c.getValueByTemplate(key, instance), c.getValueByTemplate(value, instance))
 			}
 		}
 	}
